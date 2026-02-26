@@ -10,6 +10,7 @@ const helmet    = require('helmet');
 const rateLimit = require('express-rate-limit');
 
 const app  = express();
+app.set('trust proxy', 1); // Required for Railway reverse proxy
 const PORT = process.env.PORT || 3002;
 
 // ── CORS: izinkan Cloudflare Pages + custom domain ──
