@@ -94,47 +94,110 @@ app.get('/health', (req, res) => res.json({
 // AI CHAT — Anthropic Claude
 // ══════════════════════════════════════════════
 
+// ── AI Key pools ──
+const GROQ_KEYS   = [process.env.GROQ_API_KEY_1, process.env.GROQ_API_KEY_2, process.env.GROQ_API_KEY_3].filter(Boolean);
+const GEMINI_KEYS = [process.env.GEMINI_API_KEY_1, process.env.GEMINI_API_KEY_2, process.env.GEMINI_API_KEY_3].filter(Boolean);
+const GROQ_MODEL   = process.env.GROQ_MODEL   || 'llama-3.3-70b-versatile';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
+let groqKeyIdx   = 0;
+let geminiKeyIdx = 0;
+
+async function callGroq(messages, systemPrompt) {
+    for (let attempt = 0; attempt < GROQ_KEYS.length; attempt++) {
+        const key = GROQ_KEYS[groqKeyIdx % GROQ_KEYS.length];
+        groqKeyIdx++;
+        try {
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+                body: JSON.stringify({
+                    model: GROQ_MODEL,
+                    max_tokens: 2048,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        ...messages.slice(-20).map(m => ({
+                            role: m.role === 'assistant' ? 'assistant' : 'user',
+                            content: typeof m.content === 'string' ? m.content.replace(/<[^>]*>/g, '').slice(0, 4000) : m.content
+                        }))
+                    ]
+                })
+            });
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.error?.message || `GROQ HTTP ${response.status}`);
+            }
+            const data = await response.json();
+            return { reply: data.choices?.[0]?.message?.content || 'Tidak ada respons.', provider: 'groq', model: GROQ_MODEL };
+        } catch (e) {
+            console.warn(`[GROQ key ${attempt+1}] ${e.message}`);
+            if (attempt === GROQ_KEYS.length - 1) throw e;
+        }
+    }
+}
+
+async function callGemini(messages, systemPrompt) {
+    for (let attempt = 0; attempt < GEMINI_KEYS.length; attempt++) {
+        const key = GEMINI_KEYS[geminiKeyIdx % GEMINI_KEYS.length];
+        geminiKeyIdx++;
+        try {
+            const contents = messages.slice(-20).map(m => ({
+                role: m.role === 'assistant' ? 'model' : 'user',
+                parts: [{ text: typeof m.content === 'string' ? m.content.replace(/<[^>]*>/g, '').slice(0, 4000) : m.content }]
+            }));
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                    contents,
+                    generationConfig: { maxOutputTokens: 2048 }
+                })
+            });
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.error?.message || `GEMINI HTTP ${response.status}`);
+            }
+            const data = await response.json();
+            const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Tidak ada respons.';
+            return { reply, provider: 'gemini', model: GEMINI_MODEL };
+        } catch (e) {
+            console.warn(`[GEMINI key ${attempt+1}] ${e.message}`);
+            if (attempt === GEMINI_KEYS.length - 1) throw e;
+        }
+    }
+}
+
 app.post('/api/chat', async (req, res) => {
     try {
-        const { messages = [], context = '', model = 'claude-haiku-4-5-20251001', stream = false } = req.body;
-        const apiKey = process.env.ANTHROPIC_API_KEY;
-        if (!apiKey) return res.status(503).json({ error: 'ANTHROPIC_API_KEY tidak dikonfigurasi' });
-
+        const { messages = [], context = '' } = req.body;
         const systemPrompt = context || `Kamu adalah Neo Assistant, AI Quantum v7 milik NeoPro — platform bisnis proaktif Digium Digital.
 Kepribadian: Cerdas, profesional, proaktif, actionable.
 Bahasa: Utama Bahasa Indonesia, switch sesuai permintaan.
 Kemampuan: Analisis bisnis, coding, riset, marketing, e-commerce, keuangan, otomasi.`;
 
-        const payload = {
-            model,
-            max_tokens: 2048,
-            system: systemPrompt,
-            messages: messages.slice(-20).map(m => ({
-                role:    m.role === 'assistant' ? 'assistant' : 'user',
-                content: typeof m.content === 'string'
-                    ? m.content.replace(/<[^>]*>/g, '').slice(0, 4000)
-                    : m.content
-            }))
-        };
-
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-            method:  'POST',
-            headers: {
-                'Content-Type':      'application/json',
-                'x-api-key':         apiKey,
-                'anthropic-version': '2023-06-01',
-            },
-            body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            throw new Error(err.error?.message || `Anthropic HTTP ${response.status}`);
+        let result;
+        if (GROQ_KEYS.length > 0) {
+            try {
+                result = await callGroq(messages, systemPrompt);
+                console.log(`[/api/chat] Provider: GROQ`);
+            } catch (groqErr) {
+                console.warn(`[/api/chat] GROQ gagal semua, switch ke GEMINI. Error: ${groqErr.message}`);
+                if (GEMINI_KEYS.length > 0) {
+                    result = await callGemini(messages, systemPrompt);
+                    console.log(`[/api/chat] Provider: GEMINI (fallback)`);
+                } else {
+                    throw new Error('Semua AI provider gagal dan tidak ada GEMINI key.');
+                }
+            }
+        } else if (GEMINI_KEYS.length > 0) {
+            result = await callGemini(messages, systemPrompt);
+            console.log(`[/api/chat] Provider: GEMINI`);
+        } else {
+            return res.status(503).json({ error: 'Tidak ada API key AI yang dikonfigurasi.' });
         }
 
-        const data  = await response.json();
-        const reply = data.content?.[0]?.text || 'Tidak ada respons dari AI.';
-        res.json({ reply, model, usage: data.usage });
+        res.json(result);
 
     } catch (e) {
         console.error('[/api/chat]', e.message);
