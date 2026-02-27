@@ -265,7 +265,8 @@ async function searchSerper(query) {
             });
         }
 
-        return results.length > 0 ? results.join('\n\n') : null;
+        const urls = (data.organic || []).slice(0, 4).map(item => item.link).filter(Boolean);
+        return results.length > 0 ? { text: results.join('\n\n'), urls } : null;
     } catch (e) {
         console.warn('[Search/Serper]', e.message);
         return null;
@@ -314,8 +315,12 @@ async function runDeepResearch(topic, category, maxSources = 4) {
             // Coba Serper langsung dulu
             let summary = null;
             if (SERPER_KEY) {
-                summary = await searchSerper(q);
-                if (summary) console.log(`[ResearchAgent] Serper OK untuk query ${i+1}`);
+                const serperResult = await searchSerper(q);
+                if (serperResult) {
+                    summary = serperResult.text;
+                    allSources.push(...(serperResult.urls || []));
+                    console.log(`[ResearchAgent] Serper OK untuk query ${i+1} | ${serperResult.urls?.length || 0} URL`);
+                }
             }
 
             // Fallback Brave
@@ -477,7 +482,7 @@ async function browseWeb(query, deepRead = false) {
     if (searchResults.length === 0 && SERPER_KEY) {
         const serperRaw = await searchSerper(query);
         if (serperRaw) {
-            return { summary: serperRaw, sources: [], method: 'serper' };
+            return { summary: serperRaw.text, sources: serperRaw.urls || [], method: 'serper' };
         }
     }
 
@@ -551,6 +556,8 @@ function needsWebSearch(msg) {
 async function doWebSearch(query) {
     console.log(`[WebSearch] Query: "${query}"`);
     let result = await searchSerper(query);
+    // searchSerper sekarang return {text, urls} — normalize ke string
+    if (result && typeof result === 'object') result = result.text;
     if (!result && BRAVE_KEY) {
         console.log('[WebSearch] Serper gagal/tidak ada key, coba Brave...');
         result = await searchBrave(query);
