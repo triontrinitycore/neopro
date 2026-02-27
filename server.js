@@ -230,26 +230,51 @@ async function runDeepResearch(topic, category, maxSources = 4) {
 
     console.log(`[ResearchAgent] 🔬 Mulai riset: "${topic}" | Kategori: ${template.label}`);
 
-    // Jalankan pencarian paralel (lebih cepat)
-    const searchPromises = queries.slice(0, maxSources).map(q => 
-        browseWeb(q, false).catch(() => null)
-    );
-    const results = await Promise.all(searchPromises);
-
-    // Gabungkan semua hasil
-    let allData   = [];
+    // Jalankan pencarian secara sequential untuk hindari rate limit
+    let allData    = [];
     let allSources = [];
 
-    results.forEach((r, i) => {
-        if (r && r.summary) {
-            allData.push(`\n### Query ${i+1}: "${queries[i]}"\n${r.summary}`);
-            allSources.push(...(r.sources || []));
+    for (let i = 0; i < Math.min(queries.length, maxSources); i++) {
+        try {
+            const q = queries[i];
+
+            // Coba Serper langsung dulu
+            let summary = null;
+            if (SERPER_KEY) {
+                summary = await searchSerper(q);
+                if (summary) console.log(`[ResearchAgent] Serper OK untuk query ${i+1}`);
+            }
+
+            // Fallback Brave
+            if (!summary && BRAVE_KEY) {
+                summary = await searchBrave(q);
+                if (summary) console.log(`[ResearchAgent] Brave OK untuk query ${i+1}`);
+            }
+
+            // Fallback doWebSearch
+            if (!summary) {
+                const r = await browseWeb(q, false);
+                if (r && r.summary) summary = r.summary;
+            }
+
+            if (summary) {
+                allData.push(`\n### Query ${i+1}: "${q}"\n${summary}`);
+            } else {
+                console.log(`[ResearchAgent] ⚠️ Query ${i+1} tidak ada hasil`);
+            }
+        } catch(e) {
+            console.warn(`[ResearchAgent] Query ${i+1} error:`, e.message);
         }
-    });
+    }
 
-    const combinedData = allData.join('\n\n---\n\n');
+    // Kalau search gagal total, gunakan pengetahuan AI sebagai fallback
+    let combinedData = allData.join('\n\n---\n\n');
+    if (!combinedData) {
+        console.log(`[ResearchAgent] ⚠️ Search kosong, pakai AI knowledge fallback`);
+        combinedData = `[Data dari pengetahuan AI - search API tidak mengembalikan hasil untuk topik: "${topic}"]`;
+    }
+
     const uniqueSources = [...new Set(allSources)].slice(0, 6);
-
     console.log(`[ResearchAgent] ✅ Selesai: ${allData.length} sumber data, ${uniqueSources.length} URL`);
 
     return {
@@ -369,33 +394,22 @@ async function browseWeb(query, deepRead = false) {
 
     let searchResults = [];
 
-    // 1. Prioritas: Serper API (paling reliable)
-    if (SERPER_KEY) {
-        const serperRaw = await searchSerper(query);
-        if (serperRaw) {
-            console.log(`[BrowsingAgent] Serper: hasil ditemukan`);
-            return { summary: serperRaw, sources: [], method: 'serper' };
-        }
-    }
-
-    // 2. Fallback: Brave Search
-    if (BRAVE_KEY) {
-        const braveRaw = await searchBrave(query);
-        if (braveRaw) {
-            console.log(`[BrowsingAgent] Brave: hasil ditemukan`);
-            return { summary: braveRaw, sources: [], method: 'brave' };
-        }
-    }
-
-    // 3. Last resort: DuckDuckGo scraping
+    // 1. Coba DuckDuckGo dulu (gratis)
     const ddgResults = await searchDuckDuckGo(query);
     if (ddgResults && ddgResults.length > 0) {
         searchResults = ddgResults;
         console.log(`[BrowsingAgent] DDG: ${searchResults.length} hasil`);
     }
 
+    // 2. Fallback ke Serper jika DDG gagal
+    if (searchResults.length === 0 && SERPER_KEY) {
+        const serperRaw = await searchSerper(query);
+        if (serperRaw) {
+            return { summary: serperRaw, sources: [], method: 'serper' };
+        }
+    }
+
     if (searchResults.length === 0) {
-        console.log(`[BrowsingAgent] Semua search method gagal untuk: "${query}"`);
         return null;
     }
 
@@ -838,7 +852,7 @@ app.post('/api/research', async (req, res) => {
         const researchData = await runDeepResearch(topic, category, maxSources);
 
         if (!researchData.rawData) {
-            return res.status(503).json({ error: 'Tidak dapat mengambil data riset saat ini.' });
+            researchData.rawData = `[Riset untuk: "${topic}" - menggunakan pengetahuan AI]`;
         }
 
         // Waktu realtime WIB
