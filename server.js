@@ -393,14 +393,10 @@ async function browseWeb(query, deepRead = false) {
 
 `;
     searchResults.forEach((r, i) => {
-        output += `[${i+1}] ${r.title}
-`;
-        if (r.snippet) output += `    ${r.snippet}
-`;
-        if (r.url) output += `    🔗 ${r.url}
-`;
-        output += '
-';
+        output += `[${i+1}] ${r.title}\n`;
+        if (r.snippet) output += `    ${r.snippet}\n`;
+        if (r.url) output += `    🔗 ${r.url}\n`;
+        output += '\n';
     });
 
     // 4. deepRead: buka & baca isi halaman teratas
@@ -491,9 +487,7 @@ async function searchSerper(query) {
             });
         }
 
-        return results.length > 0 ? results.join('
-
-') : null;
+        return results.length > 0 ? results.join('\n\n') : null;
     } catch (e) {
         console.warn('[Search/Serper]', e.message);
         return null;
@@ -516,9 +510,7 @@ async function searchBrave(query) {
     ${item.description}
     Sumber: ${item.url}`
         );
-        return results.length > 0 ? results.join('
-
-') : null;
+        return results.length > 0 ? results.join('\n\n') : null;
     } catch (e) {
         console.warn('[Search/Brave]', e.message);
         return null;
