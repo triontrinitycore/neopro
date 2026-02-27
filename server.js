@@ -369,22 +369,33 @@ async function browseWeb(query, deepRead = false) {
 
     let searchResults = [];
 
-    // 1. Coba DuckDuckGo dulu (gratis)
+    // 1. Prioritas: Serper API (paling reliable)
+    if (SERPER_KEY) {
+        const serperRaw = await searchSerper(query);
+        if (serperRaw) {
+            console.log(`[BrowsingAgent] Serper: hasil ditemukan`);
+            return { summary: serperRaw, sources: [], method: 'serper' };
+        }
+    }
+
+    // 2. Fallback: Brave Search
+    if (BRAVE_KEY) {
+        const braveRaw = await searchBrave(query);
+        if (braveRaw) {
+            console.log(`[BrowsingAgent] Brave: hasil ditemukan`);
+            return { summary: braveRaw, sources: [], method: 'brave' };
+        }
+    }
+
+    // 3. Last resort: DuckDuckGo scraping
     const ddgResults = await searchDuckDuckGo(query);
     if (ddgResults && ddgResults.length > 0) {
         searchResults = ddgResults;
         console.log(`[BrowsingAgent] DDG: ${searchResults.length} hasil`);
     }
 
-    // 2. Fallback ke Serper jika DDG gagal
-    if (searchResults.length === 0 && SERPER_KEY) {
-        const serperRaw = await searchSerper(query);
-        if (serperRaw) {
-            return { summary: serperRaw, sources: [], method: 'serper' };
-        }
-    }
-
     if (searchResults.length === 0) {
+        console.log(`[BrowsingAgent] Semua search method gagal untuk: "${query}"`);
         return null;
     }
 
