@@ -223,6 +223,78 @@ function detectResearchCategory(msg) {
     return 'bisnis'; // default
 }
 
+const SERPER_KEY    = process.env.SERPER_API_KEY || '';
+const BRAVE_KEY     = process.env.BRAVE_API_KEY  || '';
+
+// Web search via Serper.dev (Google)
+async function searchSerper(query) {
+    if (!SERPER_KEY) return null;
+    try {
+        const r = await fetch('https://google.serper.dev/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-API-KEY': SERPER_KEY },
+            signal: AbortSignal.timeout(8000),
+            body: JSON.stringify({ q: query, gl: 'id', hl: 'id', num: 5 })
+        });
+        if (!r.ok) return null;
+        const data = await r.json();
+
+        // Format hasil pencarian
+        const results = [];
+
+        // Knowledge graph (kotak info di kanan Google)
+        if (data.knowledgeGraph) {
+            const kg = data.knowledgeGraph;
+            results.push(`📌 ${kg.title || ''}: ${kg.description || kg.descriptionShort || ''}`);
+        }
+
+        // Answer box (jawaban langsung Google)
+        if (data.answerBox) {
+            const ab = data.answerBox;
+            const ans = ab.answer || ab.snippet || ab.snippetHighlighted?.join(' ') || '';
+            if (ans) results.push(`✅ Jawaban langsung: ${ans}`);
+        }
+
+        // Organic results (top 4)
+        if (data.organic) {
+            data.organic.slice(0, 4).forEach((item, i) => {
+                results.push(`[${i+1}] ${item.title}
+    ${item.snippet}
+    Sumber: ${item.link}`);
+            });
+        }
+
+        return results.length > 0 ? results.join('\n\n') : null;
+    } catch (e) {
+        console.warn('[Search/Serper]', e.message);
+        return null;
+    }
+}
+
+// Web search via Brave Search API (fallback)
+async function searchBrave(query) {
+    if (!BRAVE_KEY) return null;
+    try {
+        const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5&country=ID&search_lang=id`;
+        const r = await fetch(url, {
+            headers: { 'Accept': 'application/json', 'X-Subscription-Token': BRAVE_KEY },
+            signal: AbortSignal.timeout(8000)
+        });
+        if (!r.ok) return null;
+        const data = await r.json();
+        const results = (data.web?.results || []).slice(0, 4).map((item, i) =>
+            `[${i+1}] ${item.title}
+    ${item.description}
+    Sumber: ${item.url}`
+        );
+        return results.length > 0 ? results.join('\n\n') : null;
+    } catch (e) {
+        console.warn('[Search/Brave]', e.message);
+        return null;
+    }
+}
+
+
 // Lakukan riset multi-sumber paralel
 async function runDeepResearch(topic, category, maxSources = 4) {
     const template = RESEARCH_TEMPLATES[category] || RESEARCH_TEMPLATES.riset;
@@ -301,8 +373,7 @@ const GROQ_KEYS   = [process.env.GROQ_API_KEY_1, process.env.GROQ_API_KEY_2, pro
 const GEMINI_KEYS = [process.env.GEMINI_API_KEY_1, process.env.GEMINI_API_KEY_2, process.env.GEMINI_API_KEY_3].filter(Boolean);
 const GROQ_MODEL    = process.env.GROQ_MODEL   || 'llama-3.3-70b-versatile';
 const GEMINI_MODEL  = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const SERPER_KEY    = process.env.SERPER_API_KEY || '';
-const BRAVE_KEY     = process.env.BRAVE_API_KEY  || '';
+
 
 // ══════════════════════════════════════════════
 // WEB BROWSING AGENT — Neo bisa buka URL apapun
@@ -474,73 +545,6 @@ function needsWebSearch(msg) {
     return triggers.some(t => m.includes(t));
 }
 
-// Web search via Serper.dev (Google)
-async function searchSerper(query) {
-    if (!SERPER_KEY) return null;
-    try {
-        const r = await fetch('https://google.serper.dev/search', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-API-KEY': SERPER_KEY },
-            signal: AbortSignal.timeout(8000),
-            body: JSON.stringify({ q: query, gl: 'id', hl: 'id', num: 5 })
-        });
-        if (!r.ok) return null;
-        const data = await r.json();
-
-        // Format hasil pencarian
-        const results = [];
-
-        // Knowledge graph (kotak info di kanan Google)
-        if (data.knowledgeGraph) {
-            const kg = data.knowledgeGraph;
-            results.push(`📌 ${kg.title || ''}: ${kg.description || kg.descriptionShort || ''}`);
-        }
-
-        // Answer box (jawaban langsung Google)
-        if (data.answerBox) {
-            const ab = data.answerBox;
-            const ans = ab.answer || ab.snippet || ab.snippetHighlighted?.join(' ') || '';
-            if (ans) results.push(`✅ Jawaban langsung: ${ans}`);
-        }
-
-        // Organic results (top 4)
-        if (data.organic) {
-            data.organic.slice(0, 4).forEach((item, i) => {
-                results.push(`[${i+1}] ${item.title}
-    ${item.snippet}
-    Sumber: ${item.link}`);
-            });
-        }
-
-        return results.length > 0 ? results.join('\n\n') : null;
-    } catch (e) {
-        console.warn('[Search/Serper]', e.message);
-        return null;
-    }
-}
-
-// Web search via Brave Search API (fallback)
-async function searchBrave(query) {
-    if (!BRAVE_KEY) return null;
-    try {
-        const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5&country=ID&search_lang=id`;
-        const r = await fetch(url, {
-            headers: { 'Accept': 'application/json', 'X-Subscription-Token': BRAVE_KEY },
-            signal: AbortSignal.timeout(8000)
-        });
-        if (!r.ok) return null;
-        const data = await r.json();
-        const results = (data.web?.results || []).slice(0, 4).map((item, i) =>
-            `[${i+1}] ${item.title}
-    ${item.description}
-    Sumber: ${item.url}`
-        );
-        return results.length > 0 ? results.join('\n\n') : null;
-    } catch (e) {
-        console.warn('[Search/Brave]', e.message);
-        return null;
-    }
-}
 
 // Main search function dengan fallback
 async function doWebSearch(query) {
