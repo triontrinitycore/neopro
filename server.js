@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
-// NEO.PRO BACKEND v2.0 — Railway Edition
+// NEO.PRO BACKEND v2.1 — Railway Edition
 // Frontend: Cloudflare Pages (neopro.pages.dev)
+// Fix: Serper key diagnostic + force redeploy
 // ═══════════════════════════════════════════════════════════════
 
 require('dotenv').config();
@@ -1304,9 +1305,16 @@ app.use((req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n╔══════════════════════════════════════╗`);
-    console.log(`║  NeoPro Backend v2.0 — Railway        ║`);
+    console.log(`║  NeoPro Backend v2.1 — Railway        ║`);
     console.log(`║  Port    : ${PORT}                        ║`);
     console.log(`║  Frontend: ${(process.env.FRONTEND_URL || 'neopro.pages.dev').slice(0,22).padEnd(22)} ║`);
     console.log(`║  Env     : ${(process.env.RAILWAY_ENVIRONMENT || 'development').padEnd(22)} ║`);
     console.log(`╚══════════════════════════════════════╝\n`);
+
+    // ── Key diagnostics saat startup ──
+    const serperKey = process.env.SERPER_API_KEY || '';
+    const braveKey  = process.env.BRAVE_API_KEY  || '';
+    console.log(`[Startup] SERPER_API_KEY : ${serperKey ? '✅ SET (' + serperKey.slice(0,8) + '...)' : '❌ TIDAK ADA'}`);
+    console.log(`[Startup] BRAVE_API_KEY  : ${braveKey  ? '✅ SET (' + braveKey.slice(0,8)  + '...)' : '❌ TIDAK ADA'}`);
+    console.log(`[Startup] GROQ keys      : ${process.env.GROQ_API_KEY_1 ? '✅ SET' : '❌ TIDAK ADA'}`);
 });
