@@ -114,9 +114,10 @@ async function callGroq(messages, systemPrompt) {
             const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+                signal: AbortSignal.timeout(15000), // ✅ 15 detik timeout
                 body: JSON.stringify({
                     model: GROQ_MODEL,
-                    max_tokens: 2048,
+                    max_tokens: 1024, // ✅ dikurangi dari 2048 → lebih cepat
                     messages: [
                         { role: 'system', content: systemPrompt },
                         ...messages.slice(-20).map(m => ({
@@ -151,10 +152,11 @@ async function callGemini(messages, systemPrompt) {
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                signal: AbortSignal.timeout(15000), // ✅ 15 detik timeout
                 body: JSON.stringify({
                     systemInstruction: { parts: [{ text: systemPrompt }] },
                     contents,
-                    generationConfig: { maxOutputTokens: 2048 }
+                    generationConfig: { maxOutputTokens: 1024 } // ✅ dikurangi dari 2048
                 })
             });
             if (!response.ok) {
@@ -299,7 +301,7 @@ Mode aktif: ${mode || 'chat'}`;
 
     } catch (e) {
         console.error('[/api/ai/chat]', e.message);
-        res.status(500).json({ error: e.message });
+        res.status(500).json({ error: e.message, hint: 'Cek Railway Deploy Logs untuk detail' });
     }
 });
 
