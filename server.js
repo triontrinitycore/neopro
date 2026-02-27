@@ -209,7 +209,69 @@ Berikan data: CPM/CPC benchmark, engagement rate, platform terbaik.`
         ],
         systemContext: `Kamu research analyst yang memberikan data komprehensif dan akurat.
 Berikan: data statistik, sumber terpercaya, analisis tren, kesimpulan actionable.`
+    },
+
+    tiktok: {
+        label: 'TikTok Research',
+        emoji: '🎵',
+        queries: (topic) => [
+            `${topic} trending TikTok viral ${new Date().getFullYear()}`,
+            `TikTok hashtag ${topic} views engagement Indonesia`,
+            `${topic} TikTok content creator strategi viral`,
+        ],
+        systemContext: `Kamu ahli TikTok marketing & konten viral Indonesia.
+Fokus: trending sound/hashtag, strategi konten, estimasi views & engagement.
+Berikan insight: waktu posting optimal, hook terbaik, format video yang viral.`,
+        apifyActor: 'clockworks/tiktok-scraper',
+        apifyInput: (topic) => ({ hashtags: [topic.replace(/\s+/g, '')], resultsPerPage: 10 })
+    },
+
+    instagram: {
+        label: 'Instagram Research',
+        emoji: '📸',
+        queries: (topic) => [
+            `${topic} Instagram trending hashtag engagement ${new Date().getFullYear()}`,
+            `${topic} Instagram influencer Indonesia followers niche`,
+            `${topic} Instagram Reels content strategy viral`,
+        ],
+        systemContext: `Kamu ahli Instagram marketing & analisis konten Indonesia.
+Fokus: hashtag trending, engagement rate, strategi Reels, analisis kompetitor.
+Berikan data: reach estimasi, hashtag optimal, waktu posting, format terbaik.`,
+        apifyActor: 'apify/instagram-scraper',
+        apifyInput: (topic) => ({ hashtags: [topic.replace(/\s+/g, '')], resultsLimit: 10 })
+    },
+
+    gmaps: {
+        label: 'Google Maps Research',
+        emoji: '🗺️',
+        queries: (topic) => [
+            `${topic} lokasi terbaik Indonesia review rating Google Maps`,
+            `${topic} bisnis lokal Indonesia competitor analysis`,
+            `${topic} peluang usaha lokasi strategis Indonesia`,
+        ],
+        systemContext: `Kamu analis bisnis lokal spesialis Google Maps & lokasi Indonesia.
+Fokus: rating bisnis, review customer, analisis kompetitor lokal, peluang pasar.
+Berikan data: rating rata-rata, jumlah review, gap layanan, rekomendasi lokasi.`,
+        apifyActor: 'compass/crawler-google-places',
+        apifyInput: (topic) => ({ searchStringsArray: [topic], maxCrawledPlaces: 10, language: 'id' })
+    },
+
+    marketplace: {
+        label: 'Marketplace Indonesia',
+        emoji: '🛒',
+        queries: (topic) => [
+            `${topic} terlaris Tokopedia Shopee harga ${new Date().getFullYear()}`,
+            `${topic} produk laris marketplace Indonesia competitor seller`,
+            `${topic} review produk Tokopedia Shopee rating terbaik`,
+            `jual ${topic} online strategi seller Indonesia TikTok Shop`,
+        ],
+        systemContext: `Kamu ahli marketplace Indonesia (Tokopedia, Shopee, Lazada, TikTok Shop).
+Fokus: produk terlaris, estimasi penjualan, strategi listing, analisis kompetitor seller.
+Berikan data: harga optimal, keyword SEO marketplace, tips foto produk, strategi iklan.`,
+        apifyActor: 'junglee/free-amazon-product-scraper',
+        apifyInput: (topic) => ({ keyword: topic, maxItems: 10 })
     }
+
 };
 
 // Deteksi kategori riset dari pesan user
@@ -219,13 +281,123 @@ function detectResearchCategory(msg) {
     if (m.match(/pod|print on demand|merch|redbubble|teepublic|printify|kaos|baju/)) return 'pod';
     if (m.match(/microstock|shutterstock|adobe stock|getty|stock photo|stock video|contributor/)) return 'microstock';
     if (m.match(/digital product|digital download|template|canva template|notion|gumroad|etsy/)) return 'digital';
-    if (m.match(/marketing|konten|content|iklan|ads|seo|sosmed|tiktok|instagram/)) return 'marketing';
+    if (m.match(/tiktok|tik tok|fyp|hashtag tiktok/)) return 'tiktok';
+    if (m.match(/instagram|reels|ig |insta|hashtag ig/)) return 'instagram';
+    if (m.match(/google maps|gmaps|maps bisnis|lokasi|tempat makan|warung|toko lokal/)) return 'gmaps';
+    if (m.match(/tokopedia|shopee|lazada|marketplace|toko online|jualan online|seller|tiktok shop/)) return 'marketplace';
+    if (m.match(/marketing|konten|content|iklan|ads|seo|sosmed/)) return 'marketing';
     if (m.match(/riset|research|analisis|cari data|data tentang|info tentang|trend/)) return 'riset';
     return 'bisnis'; // default
 }
 
 const SERPER_KEY    = process.env.SERPER_API_KEY || '';
 const BRAVE_KEY     = process.env.BRAVE_API_KEY  || '';
+const APIFY_KEY     = process.env.APIFY_API_KEY  || '';
+
+// ══════════════════════════════════════════════
+// APIFY SCRAPING AGENT
+// ══════════════════════════════════════════════
+async function scrapeApify(actorId, input, timeoutMs = 45000) {
+    if (!APIFY_KEY) {
+        console.log('[ApifyAgent] ⚠️ APIFY_API_KEY tidak ada, skip');
+        return null;
+    }
+    try {
+        console.log(`[ApifyAgent] 🕷️ Mulai scrape: ${actorId}`);
+
+        // 1. Jalankan actor (async run)
+        const runRes = await fetch(`https://api.apify.com/v2/acts/${encodeURIComponent(actorId)}/runs`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${APIFY_KEY}`
+            },
+            signal: AbortSignal.timeout(15000),
+            body: JSON.stringify({ ...input, memory: 256 })
+        });
+        if (!runRes.ok) {
+            console.warn(`[ApifyAgent] Run gagal: ${runRes.status}`);
+            return null;
+        }
+        const runData = await runRes.json();
+        const runId = runData.data?.id;
+        if (!runId) return null;
+        console.log(`[ApifyAgent] Run ID: ${runId} — menunggu selesai...`);
+
+        // 2. Poll status sampai selesai (max timeout)
+        const start = Date.now();
+        let status = 'RUNNING';
+        while (status === 'RUNNING' || status === 'READY' || status === 'STARTING') {
+            if (Date.now() - start > timeoutMs) {
+                console.warn('[ApifyAgent] ⏰ Timeout menunggu hasil');
+                return null;
+            }
+            await new Promise(r => setTimeout(r, 3000));
+            const statusRes = await fetch(`https://api.apify.com/v2/actor-runs/${runId}`, {
+                headers: { 'Authorization': `Bearer ${APIFY_KEY}` },
+                signal: AbortSignal.timeout(5000)
+            });
+            if (!statusRes.ok) break;
+            const statusData = await statusRes.json();
+            status = statusData.data?.status || 'FAILED';
+        }
+
+        if (status !== 'SUCCEEDED') {
+            console.warn(`[ApifyAgent] Run status: ${status}`);
+            return null;
+        }
+
+        // 3. Ambil hasil dari dataset
+        const datasetId = runData.data?.defaultDatasetId;
+        const itemsRes = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?limit=10&clean=true`, {
+            headers: { 'Authorization': `Bearer ${APIFY_KEY}` },
+            signal: AbortSignal.timeout(10000)
+        });
+        if (!itemsRes.ok) return null;
+        const items = await itemsRes.json();
+        console.log(`[ApifyAgent] ✅ Dapat ${items.length} item dari ${actorId}`);
+        return items;
+
+    } catch (e) {
+        console.warn('[ApifyAgent] Error:', e.message);
+        return null;
+    }
+}
+
+// Format hasil Apify menjadi teks ringkas untuk AI
+function formatApifyResults(items, actorId) {
+    if (!items || items.length === 0) return null;
+    let output = `\n### 🕷️ Data Scraping (${actorId}):\n`;
+
+    items.slice(0, 8).forEach((item, i) => {
+        // TikTok
+        if (item.text || item.diggCount !== undefined) {
+            output += `[${i+1}] 🎵 ${item.text?.slice(0,100) || 'No caption'}\n`;
+            output += `    ❤️ ${item.diggCount || 0} likes | 💬 ${item.commentCount || 0} komentar | 🔗 ${item.webVideoUrl || ''}\n\n`;
+        }
+        // Instagram
+        else if (item.caption || item.likesCount !== undefined) {
+            output += `[${i+1}] 📸 ${item.caption?.slice(0,100) || 'No caption'}\n`;
+            output += `    ❤️ ${item.likesCount || 0} likes | 💬 ${item.commentsCount || 0} komentar | 🔗 ${item.url || ''}\n\n`;
+        }
+        // Google Maps
+        else if (item.name && item.rating !== undefined) {
+            output += `[${i+1}] 🗺️ ${item.name} — ⭐ ${item.rating} (${item.reviewsCount || 0} ulasan)\n`;
+            output += `    📍 ${item.address || ''} | 📞 ${item.phone || '-'}\n\n`;
+        }
+        // Amazon/Marketplace
+        else if (item.title && (item.price || item.stars)) {
+            output += `[${i+1}] 🛒 ${item.title?.slice(0,100)}\n`;
+            output += `    💰 ${item.price || '-'} | ⭐ ${item.stars || '-'} | 📦 ${item.reviews || 0} review\n\n`;
+        }
+        // Generic fallback
+        else {
+            const preview = JSON.stringify(item).slice(0, 150);
+            output += `[${i+1}] ${preview}\n\n`;
+        }
+    });
+    return output;
+}
 
 // Web search via Serper.dev (Google)
 async function searchSerper(query) {
@@ -350,6 +522,27 @@ async function runDeepResearch(topic, category, maxSources = 4) {
     if (!combinedData) {
         console.log(`[ResearchAgent] ⚠️ Search kosong, pakai AI knowledge fallback`);
         combinedData = `[Data dari pengetahuan AI - search API tidak mengembalikan hasil untuk topik: "${topic}"]`;
+    }
+
+    // ── Apify Enrichment (jika kategori support scraping) ──
+    if (APIFY_KEY && template.apifyActor && template.apifyInput) {
+        try {
+            console.log(`[ResearchAgent] 🕷️ Apify enrichment untuk kategori: ${category}`);
+            const apifyItems = await scrapeApify(template.apifyActor, template.apifyInput(topic));
+            const apifyFormatted = formatApifyResults(apifyItems, template.apifyActor);
+            if (apifyFormatted) {
+                combinedData += `\n\n---\n${apifyFormatted}`;
+                if (apifyItems) {
+                    apifyItems.slice(0, 5).forEach(item => {
+                        const url = item.url || item.webVideoUrl || item.link;
+                        if (url) allSources.push(url);
+                    });
+                }
+                console.log(`[ResearchAgent] ✅ Apify data ditambahkan`);
+            }
+        } catch (e) {
+            console.warn('[ResearchAgent] Apify enrichment error:', e.message);
+        }
     }
 
     const uniqueSources = [...new Set(allSources)].slice(0, 6);
@@ -1323,5 +1516,7 @@ app.listen(PORT, '0.0.0.0', () => {
     const braveKey  = process.env.BRAVE_API_KEY  || '';
     console.log(`[Startup] SERPER_API_KEY : ${serperKey ? '✅ SET (' + serperKey.slice(0,8) + '...)' : '❌ TIDAK ADA'}`);
     console.log(`[Startup] BRAVE_API_KEY  : ${braveKey  ? '✅ SET (' + braveKey.slice(0,8)  + '...)' : '❌ TIDAK ADA'}`);
+    const apifyKey = process.env.APIFY_API_KEY || '';
+    console.log(`[Startup] APIFY_API_KEY  : ${apifyKey  ? '✅ SET (' + apifyKey.slice(0,8)  + '...)' : '⚠️  TIDAK ADA (scraping Apify nonaktif)'}`);
     console.log(`[Startup] GROQ keys      : ${process.env.GROQ_API_KEY_1 ? '✅ SET' : '❌ TIDAK ADA'}`);
 });
