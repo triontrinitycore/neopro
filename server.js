@@ -254,7 +254,7 @@ app.get('/api/ai/test', async (req, res) => {
 
 app.post('/api/ai/chat', async (req, res) => {
     try {
-        const { message, mode, conversation = [] } = req.body;
+        const { message, mode, conversation = [], userContext = {} } = req.body;
 
         if (!message) return res.status(400).json({ error: 'message wajib diisi' });
 
@@ -266,11 +266,25 @@ app.post('/api/ai/chat', async (req, res) => {
             { role: 'user', content: message }
         ];
 
+        // ✅ Ambil info user dari request
+        const userName  = userContext.name  || (userContext.email || '').split('@')[0] || 'Pengguna';
+        const userEmail = userContext.email || 'tidak diketahui';
+        const userPlan  = userContext.plan  || 'pro';
+
         const systemPrompt = `Kamu adalah Neo Assistant, AI Quantum v7 milik NeoPro — platform bisnis proaktif Digium Digital.
-Kepribadian: Cerdas, profesional, proaktif, actionable, langsung ke inti jawaban.
-Bahasa: Utama Bahasa Indonesia, switch sesuai permintaan user.
-Kemampuan: Analisis bisnis, coding, riset, marketing, e-commerce, keuangan, otomasi.
-Mode aktif: ${mode || 'chat'}`;
+
+DATA USER YANG SEDANG CHAT:
+- Nama   : ${userName}
+- Email  : ${userEmail}
+- Plan   : NeoPro ${userPlan}
+- Panggil user dengan nama "${userName}" secara natural.
+- Jika ditanya email atau identitas dirinya, jawab berdasarkan data di atas.
+
+KEPRIBADIAN: Cerdas, profesional, proaktif, actionable, langsung ke inti jawaban.
+INGATAN: Ingat konteks seluruh percakapan dalam sesi ini.
+BAHASA: Utama Bahasa Indonesia, switch sesuai permintaan.
+KEMAMPUAN: Analisis bisnis, coding, riset, marketing, e-commerce, keuangan, otomasi.
+MODE: ${mode || 'chat'}`;
 
         let result;
         if (GROQ_KEYS.length > 0) {
