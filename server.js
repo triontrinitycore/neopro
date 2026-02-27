@@ -61,6 +61,7 @@ app.get('/', (req, res) => res.json({
     endpoints: [
         'GET  /health',
         'POST /api/chat',
+        'POST /api/ai/chat',
         'POST /api/whatsapp/send',
         'POST /api/telegram/send',
         'POST /api/slack/send',
@@ -201,6 +202,64 @@ Kemampuan: Analisis bisnis, coding, riset, marketing, e-commerce, keuangan, otom
 
     } catch (e) {
         console.error('[/api/chat]', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ══════════════════════════════════════════════
+// AI CHAT ALIAS — /api/ai/chat (dipakai dashboard.html)
+// Frontend expect: { response } bukan { reply }
+// ══════════════════════════════════════════════
+
+app.post('/api/ai/chat', async (req, res) => {
+    try {
+        const { message, mode, conversation = [] } = req.body;
+
+        // Konversi format frontend → format callGroq/callGemini
+        const messages = [
+            ...conversation.slice(-10).map(m => ({
+                role: m.role,
+                content: typeof m.content === 'string' ? m.content : ''
+            })),
+            { role: 'user', content: message || '' }
+        ];
+
+        const systemPrompt = `Kamu adalah Neo Assistant, AI Quantum v7 milik NeoPro — platform bisnis proaktif Digium Digital.
+Kepribadian: Cerdas, profesional, proaktif, actionable, langsung ke inti jawaban.
+Bahasa: Utama Bahasa Indonesia, switch sesuai permintaan user.
+Kemampuan: Analisis bisnis, coding, riset, marketing, e-commerce, keuangan, otomasi.
+Mode aktif: ${mode || 'chat'}`;
+
+        let result;
+        if (GROQ_KEYS.length > 0) {
+            try {
+                result = await callGroq(messages, systemPrompt);
+                console.log(`[/api/ai/chat] Provider: GROQ | Mode: ${mode || 'chat'}`);
+            } catch (groqErr) {
+                console.warn(`[/api/ai/chat] GROQ gagal, switch ke GEMINI: ${groqErr.message}`);
+                if (GEMINI_KEYS.length > 0) {
+                    result = await callGemini(messages, systemPrompt);
+                    console.log(`[/api/ai/chat] Provider: GEMINI (fallback)`);
+                } else {
+                    throw new Error('Semua AI provider gagal.');
+                }
+            }
+        } else if (GEMINI_KEYS.length > 0) {
+            result = await callGemini(messages, systemPrompt);
+            console.log(`[/api/ai/chat] Provider: GEMINI`);
+        } else {
+            return res.status(503).json({ error: 'Tidak ada API key AI yang dikonfigurasi.' });
+        }
+
+        // ✅ Return format yang diharapkan frontend: { response }
+        res.json({
+            response: result.reply,
+            provider: result.provider,
+            model:    result.model
+        });
+
+    } catch (e) {
+        console.error('[/api/ai/chat]', e.message);
         res.status(500).json({ error: e.message });
     }
 });
