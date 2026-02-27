@@ -93,6 +93,180 @@ app.get('/health', (req, res) => res.json({
     }
 }));
 
+// ════════════════════════════════════════════════════════════════
+// NEO RESEARCH AGENT — Deep Multi-Source Research Engine
+// Kategori: KDP, POD, Microstock, Digital Product + Skill Market
+// ════════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════════
+// NEO RESEARCH AGENT — Deep Multi-Source Research Engine
+// Kategori: KDP, POD, Microstock, Digital Product + Skill Market
+// ════════════════════════════════════════════════════════════════
+
+// ── Template riset per kategori bisnis ──
+const RESEARCH_TEMPLATES = {
+
+    kdp: {
+        label: 'KDP (Kindle Direct Publishing)',
+        emoji: '📚',
+        queries: (topic) => [
+            `KDP low content book trending niche ${topic} ${new Date().getFullYear()}`,
+            `Amazon KDP best selling ${topic} keywords royalty`,
+            `KDP no content book profitable ${topic} competition analysis`,
+            `self publishing ${topic} revenue passive income strategy`,
+            `KDP interior template ${topic} canva design tips`
+        ],
+        systemContext: `Kamu ahli KDP (Kindle Direct Publishing) Amazon. 
+Fokus: analisis niche, keyword research, kompetisi, estimasi royalti, strategi listing.
+Berikan data konkret: BSR (Best Seller Rank), estimasi penjualan/bulan, harga optimal.`
+    },
+
+    pod: {
+        label: 'POD (Print on Demand)',
+        emoji: '👕',
+        queries: (topic) => [
+            `print on demand trending design ${topic} ${new Date().getFullYear()}`,
+            `Redbubble Merch Amazon Teepublic best seller ${topic} niche`,
+            `POD profitable niche ${topic} competition low high demand`,
+            `print on demand design ideas trending ${topic} etsy`,
+            `POD business strategy ${topic} marketing tips revenue`
+        ],
+        systemContext: `Kamu ahli Print on Demand (Redbubble, Merch by Amazon, Teepublic, Printify, Printful).
+Fokus: trending design niche, kompetisi platform, estimasi earning, tips upload massal.
+Berikan insight: niche yang underserved, tag optimal, strategi pricing.`
+    },
+
+    microstock: {
+        label: 'Microstock',
+        emoji: '📸',
+        queries: (topic) => [
+            `microstock best selling ${topic} Shutterstock Adobe Stock Getty ${new Date().getFullYear()}`,
+            `stock photo video trending ${topic} high demand low competition`,
+            `microstock contributor earnings ${topic} portfolio tips`,
+            `Shutterstock on demand ${topic} keyword research strategy`,
+            `microstock AI generated ${topic} accepted rejected policy`
+        ],
+        systemContext: `Kamu ahli Microstock (Shutterstock, Adobe Stock, Getty, iStock, Alamy, Pond5).
+Fokus: trending content, keyword strategy, acceptance rate, estimasi royalti per download.
+Berikan data: kategori paling laku, tips metadata, strategi portofolio.`
+    },
+
+    digital: {
+        label: 'Digital Product',
+        emoji: '💾',
+        queries: (topic) => [
+            `digital product best selling ${topic} Etsy Gumroad ${new Date().getFullYear()}`,
+            `digital download profitable niche ${topic} passive income`,
+            `${topic} digital template canva notion spreadsheet selling`,
+            `digital product marketing ${topic} email list social media strategy`,
+            `Etsy digital product ${topic} SEO tags description optimize`
+        ],
+        systemContext: `Kamu ahli Digital Product (Etsy, Gumroad, Payhip, Creative Market).
+Fokus: produk yang laku, platform terbaik, strategi pricing, marketing organik.
+Berikan data: estimasi revenue, niche populer, tips SEO per platform.`
+    },
+
+    bisnis: {
+        label: 'Analisis Bisnis',
+        emoji: '📊',
+        queries: (topic) => [
+            `${topic} business analysis market trend Indonesia ${new Date().getFullYear()}`,
+            `${topic} competitor analysis SWOT strategy`,
+            `${topic} target market customer persona Indonesia`,
+            `${topic} revenue model pricing strategy`,
+            `${topic} digital marketing strategy ROI Indonesia`
+        ],
+        systemContext: `Kamu konsultan bisnis senior dengan expertise pasar Indonesia.
+Fokus: analisis pasar, kompetitor, peluang, strategi go-to-market.
+Berikan insight actionable dengan data konkret dan langkah implementasi.`
+    },
+
+    marketing: {
+        label: 'Marketing & Konten',
+        emoji: '📣',
+        queries: (topic) => [
+            `${topic} marketing strategy social media trend ${new Date().getFullYear()}`,
+            `${topic} content marketing viral Indonesia TikTok Instagram`,
+            `${topic} SEO keyword research Google Indonesia`,
+            `${topic} ads Facebook Google performance benchmark`,
+            `${topic} influencer marketing UGC strategy Indonesia`
+        ],
+        systemContext: `Kamu digital marketing expert spesialis pasar Indonesia.
+Fokus: strategi konten, iklan berbayar, SEO, influencer, conversion optimization.
+Berikan data: CPM/CPC benchmark, engagement rate, platform terbaik.`
+    },
+
+    riset: {
+        label: 'Riset Umum',
+        emoji: '🔬',
+        queries: (topic) => [
+            `${topic} research data statistics ${new Date().getFullYear()}`,
+            `${topic} latest news update trend`,
+            `${topic} expert opinion analysis report`,
+            `${topic} Indonesia market opportunity`,
+            `${topic} how to guide best practice`
+        ],
+        systemContext: `Kamu research analyst yang memberikan data komprehensif dan akurat.
+Berikan: data statistik, sumber terpercaya, analisis tren, kesimpulan actionable.`
+    }
+};
+
+// Deteksi kategori riset dari pesan user
+function detectResearchCategory(msg) {
+    const m = msg.toLowerCase();
+    if (m.match(/kdp|kindle|low content|no content|amazon book|self publish/)) return 'kdp';
+    if (m.match(/pod|print on demand|merch|redbubble|teepublic|printify|kaos|baju/)) return 'pod';
+    if (m.match(/microstock|shutterstock|adobe stock|getty|stock photo|stock video|contributor/)) return 'microstock';
+    if (m.match(/digital product|digital download|template|canva template|notion|gumroad|etsy/)) return 'digital';
+    if (m.match(/marketing|konten|content|iklan|ads|seo|sosmed|tiktok|instagram/)) return 'marketing';
+    if (m.match(/riset|research|analisis|cari data|data tentang|info tentang|trend/)) return 'riset';
+    return 'bisnis'; // default
+}
+
+// Lakukan riset multi-sumber paralel
+async function runDeepResearch(topic, category, maxSources = 4) {
+    const template = RESEARCH_TEMPLATES[category] || RESEARCH_TEMPLATES.riset;
+    const queries  = template.queries(topic);
+
+    console.log(`[ResearchAgent] 🔬 Mulai riset: "${topic}" | Kategori: ${template.label}`);
+
+    // Jalankan pencarian paralel (lebih cepat)
+    const searchPromises = queries.slice(0, maxSources).map(q => 
+        browseWeb(q, false).catch(() => null)
+    );
+    const results = await Promise.all(searchPromises);
+
+    // Gabungkan semua hasil
+    let allData   = [];
+    let allSources = [];
+
+    results.forEach((r, i) => {
+        if (r && r.summary) {
+            allData.push(`\n### Query ${i+1}: "${queries[i]}"\n${r.summary}`);
+            allSources.push(...(r.sources || []));
+        }
+    });
+
+    const combinedData = allData.join('\n\n---\n\n');
+    const uniqueSources = [...new Set(allSources)].slice(0, 6);
+
+    console.log(`[ResearchAgent] ✅ Selesai: ${allData.length} sumber data, ${uniqueSources.length} URL`);
+
+    return {
+        topic,
+        category,
+        categoryLabel: template.label,
+        categoryEmoji: template.emoji,
+        systemContext: template.systemContext,
+        rawData: combinedData,
+        sources: uniqueSources,
+        queriesUsed: queries.slice(0, maxSources),
+        timestamp: new Date().toISOString()
+    };
+}
+
+
+
 // ══════════════════════════════════════════════
 // AI CHAT — Anthropic Claude
 // ══════════════════════════════════════════════
@@ -100,11 +274,272 @@ app.get('/health', (req, res) => res.json({
 // ── AI Key pools ──
 const GROQ_KEYS   = [process.env.GROQ_API_KEY_1, process.env.GROQ_API_KEY_2, process.env.GROQ_API_KEY_3].filter(Boolean);
 const GEMINI_KEYS = [process.env.GEMINI_API_KEY_1, process.env.GEMINI_API_KEY_2, process.env.GEMINI_API_KEY_3].filter(Boolean);
-const GROQ_MODEL   = process.env.GROQ_MODEL   || 'llama-3.3-70b-versatile';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const GROQ_MODEL    = process.env.GROQ_MODEL   || 'llama-3.3-70b-versatile';
+const GEMINI_MODEL  = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const SERPER_KEY    = process.env.SERPER_API_KEY || '';
+const BRAVE_KEY     = process.env.BRAVE_API_KEY  || '';
+
+// ══════════════════════════════════════════════
+// WEB BROWSING AGENT — Neo bisa buka URL apapun
+// ══════════════════════════════════════════════
+
+// Bersihkan HTML jadi teks bersih
+function stripHtml(html) {
+    return html
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+        .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+        .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+        .slice(0, 4000); // max 4000 char agar tidak overflow context
+}
+
+// Fetch & baca isi halaman web manapun
+async function fetchWebPage(url) {
+    try {
+        const r = await fetch(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; NeoBot/1.0)',
+                'Accept': 'text/html,application/xhtml+xml',
+                'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8'
+            },
+            signal: AbortSignal.timeout(8000),
+            redirect: 'follow'
+        });
+        if (!r.ok) return null;
+        const html = await r.text();
+        const text = stripHtml(html);
+        return text.length > 100 ? text : null;
+    } catch (e) {
+        console.warn(`[WebFetch] Gagal buka ${url}:`, e.message);
+        return null;
+    }
+}
+
+// DuckDuckGo search — GRATIS tanpa API key
+async function searchDuckDuckGo(query) {
+    try {
+        const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}&kl=id-id`;
+        const r = await fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NeoBot/1.0)' },
+            signal: AbortSignal.timeout(8000)
+        });
+        if (!r.ok) return null;
+        const html = await r.text();
+
+        // Ekstrak links hasil search dari HTML DuckDuckGo
+        const linkRegex = /class="result__url"[^>]*>([^<]+)/g;
+        const titleRegex = /class="result__a"[^>]*>([^<]+)/g;
+        const snippetRegex = /class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
+
+        const titles = [...html.matchAll(/class="result__a"[^>]*>([^<]+)/g)].map(m => m[1].trim());
+        const urls   = [...html.matchAll(/class="result__url"[^>]*>\s*([^\s<]+)/g)].map(m => {
+            let u = m[1].trim();
+            if (!u.startsWith('http')) u = 'https://' + u;
+            return u;
+        });
+        const snippets = [...html.matchAll(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g)]
+            .map(m => m[1].replace(/<[^>]+>/g,'').trim());
+
+        const results = titles.slice(0,5).map((title, i) => ({
+            title,
+            url: urls[i] || '',
+            snippet: snippets[i] || ''
+        })).filter(r => r.url);
+
+        return results;
+    } catch (e) {
+        console.warn('[DDG]', e.message);
+        return null;
+    }
+}
+
+// ══ MAIN BROWSING AGENT ══
+// Cari + buka halaman + baca konten
+async function browseWeb(query, deepRead = false) {
+    console.log(`[BrowsingAgent] Mencari: "${query}" | deepRead: ${deepRead}`);
+
+    let searchResults = [];
+
+    // 1. Coba DuckDuckGo dulu (gratis)
+    const ddgResults = await searchDuckDuckGo(query);
+    if (ddgResults && ddgResults.length > 0) {
+        searchResults = ddgResults;
+        console.log(`[BrowsingAgent] DDG: ${searchResults.length} hasil`);
+    }
+
+    // 2. Fallback ke Serper jika DDG gagal
+    if (searchResults.length === 0 && SERPER_KEY) {
+        const serperRaw = await searchSerper(query);
+        if (serperRaw) {
+            return { summary: serperRaw, sources: [], method: 'serper' };
+        }
+    }
+
+    if (searchResults.length === 0) {
+        return null;
+    }
+
+    // 3. Format ringkas dari snippet dulu
+    let output = `🔍 Hasil pencarian untuk: "${query}"
+
+`;
+    searchResults.forEach((r, i) => {
+        output += `[${i+1}] ${r.title}
+`;
+        if (r.snippet) output += `    ${r.snippet}
+`;
+        if (r.url) output += `    🔗 ${r.url}
+`;
+        output += '
+';
+    });
+
+    // 4. deepRead: buka & baca isi halaman teratas
+    if (deepRead && searchResults[0]?.url) {
+        console.log(`[BrowsingAgent] Deep reading: ${searchResults[0].url}`);
+        const pageContent = await fetchWebPage(searchResults[0].url);
+        if (pageContent) {
+            output += `
+📄 ISI HALAMAN TERATAS (${searchResults[0].url}):
+${pageContent}`;
+        }
+    }
+
+    return {
+        summary: output,
+        sources: searchResults.map(r => r.url).filter(Boolean),
+        method: 'browsing-agent'
+    };
+}
 
 let groqKeyIdx   = 0;
 let geminiKeyIdx = 0;
+
+// ══════════════════════════════════════════════
+// WEB SEARCH — Serper (Google) + Brave fallback
+// ══════════════════════════════════════════════
+
+// Deteksi apakah pesan butuh search internet
+function needsWebSearch(msg) {
+    const m = msg.toLowerCase();
+    // Kata kunci yang butuh data realtime
+    const triggers = [
+        // Waktu/berita
+        'berita','news','terbaru','terkini','hari ini','sekarang','minggu ini','bulan ini',
+        'update','trending','viral','breaking',
+        // Harga/keuangan
+        'harga','price','kurs','dollar','bitcoin','saham','ihsg','bbm','bensin','emas',
+        'crypto','ethereum','nilai tukar','inflasi','suku bunga',
+        // Cuaca
+        'cuaca','weather','hujan','suhu','temperatur','prakiraan',
+        // Info umum realtime
+        'siapa ceo','siapa presiden','siapa menteri','jadwal','libur nasional',
+        'kurs rupiah','kurs usd','kurs sgd',
+        // Produk/bisnis
+        'review','spesifikasi','spec','kompetitor','market share','tren bisnis',
+        // Cari/temukan
+        'carikan','cari','temukan','cek','search','googling','browsing',
+        'info tentang','data tentang','berapa','kapan','dimana','siapa'
+    ];
+    return triggers.some(t => m.includes(t));
+}
+
+// Web search via Serper.dev (Google)
+async function searchSerper(query) {
+    if (!SERPER_KEY) return null;
+    try {
+        const r = await fetch('https://google.serper.dev/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-API-KEY': SERPER_KEY },
+            signal: AbortSignal.timeout(8000),
+            body: JSON.stringify({ q: query, gl: 'id', hl: 'id', num: 5 })
+        });
+        if (!r.ok) return null;
+        const data = await r.json();
+
+        // Format hasil pencarian
+        const results = [];
+
+        // Knowledge graph (kotak info di kanan Google)
+        if (data.knowledgeGraph) {
+            const kg = data.knowledgeGraph;
+            results.push(`📌 ${kg.title || ''}: ${kg.description || kg.descriptionShort || ''}`);
+        }
+
+        // Answer box (jawaban langsung Google)
+        if (data.answerBox) {
+            const ab = data.answerBox;
+            const ans = ab.answer || ab.snippet || ab.snippetHighlighted?.join(' ') || '';
+            if (ans) results.push(`✅ Jawaban langsung: ${ans}`);
+        }
+
+        // Organic results (top 4)
+        if (data.organic) {
+            data.organic.slice(0, 4).forEach((item, i) => {
+                results.push(`[${i+1}] ${item.title}
+    ${item.snippet}
+    Sumber: ${item.link}`);
+            });
+        }
+
+        return results.length > 0 ? results.join('
+
+') : null;
+    } catch (e) {
+        console.warn('[Search/Serper]', e.message);
+        return null;
+    }
+}
+
+// Web search via Brave Search API (fallback)
+async function searchBrave(query) {
+    if (!BRAVE_KEY) return null;
+    try {
+        const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5&country=ID&search_lang=id`;
+        const r = await fetch(url, {
+            headers: { 'Accept': 'application/json', 'X-Subscription-Token': BRAVE_KEY },
+            signal: AbortSignal.timeout(8000)
+        });
+        if (!r.ok) return null;
+        const data = await r.json();
+        const results = (data.web?.results || []).slice(0, 4).map((item, i) =>
+            `[${i+1}] ${item.title}
+    ${item.description}
+    Sumber: ${item.url}`
+        );
+        return results.length > 0 ? results.join('
+
+') : null;
+    } catch (e) {
+        console.warn('[Search/Brave]', e.message);
+        return null;
+    }
+}
+
+// Main search function dengan fallback
+async function doWebSearch(query) {
+    console.log(`[WebSearch] Query: "${query}"`);
+    let result = await searchSerper(query);
+    if (!result && BRAVE_KEY) {
+        console.log('[WebSearch] Serper gagal/tidak ada key, coba Brave...');
+        result = await searchBrave(query);
+    }
+    if (result) {
+        console.log('[WebSearch] ✅ Hasil ditemukan');
+    } else {
+        console.log('[WebSearch] ❌ Tidak ada hasil (pastikan SERPER_API_KEY atau BRAVE_API_KEY diset)');
+    }
+    return result;
+}
 
 async function callGroq(messages, systemPrompt) {
     for (let attempt = 0; attempt < GROQ_KEYS.length; attempt++) {
@@ -254,7 +689,7 @@ app.get('/api/ai/test', async (req, res) => {
 
 app.post('/api/ai/chat', async (req, res) => {
     try {
-        const { message, mode, conversation = [], userContext = {} } = req.body;
+        const { message, mode, conversation = [], userContext = {}, clientTime = {} } = req.body;
 
         if (!message) return res.status(400).json({ error: 'message wajib diisi' });
 
@@ -266,25 +701,84 @@ app.post('/api/ai/chat', async (req, res) => {
             { role: 'user', content: message }
         ];
 
-        // ✅ Ambil info user dari request
+        // ✅ Web Browsing Agent — Neo cari & baca internet otomatis
+        let webSearchResults = '';
+        let webSources = [];
+        
+        // Deteksi apakah perlu deep read (buka & baca full halaman)
+        const deepReadKeywords = ['isi artikel','baca','rangkum','full','detail','lengkap','spesifikasi','spec','review lengkap','harga terbaru'];
+        const needsDeepRead = deepReadKeywords.some(k => message.toLowerCase().includes(k));
+
+        if (needsWebSearch(message)) {
+            const searchQuery = message.slice(0, 200);
+            console.log(`[/api/ai/chat] Browsing agent aktif untuk: "${searchQuery.slice(0,50)}"`);
+            
+            const browseResult = await browseWeb(searchQuery, needsDeepRead);
+            if (browseResult) {
+                webSearchResults = browseResult.summary;
+                webSources = browseResult.sources;
+                console.log(`[/api/ai/chat] ✅ Web data ready via ${browseResult.method}`);
+            }
+        }
+
+        // ✅ Info user
         const userName  = userContext.name  || (userContext.email || '').split('@')[0] || 'Pengguna';
         const userEmail = userContext.email || 'tidak diketahui';
         const userPlan  = userContext.plan  || 'pro';
 
+        // ✅ Waktu realtime dari server (Railway = UTC+0, konversi ke WIB UTC+7)
+        const now = new Date();
+        const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+        const HARI = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+        const BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+
+        const realtimeInfo = {
+            jamWIB    : wib.toISOString().slice(11,16), // "14:23"
+            hariNama  : HARI[wib.getDay()],
+            tanggal   : wib.getDate(),
+            bulanNama : BULAN[wib.getMonth()],
+            bulanNum  : wib.getMonth() + 1,
+            tahun     : wib.getFullYear(),
+            // Jika client kirim timezone-nya sendiri, pakai itu
+            timezone  : clientTime.timezone || 'WIB (UTC+7)',
+        };
+
+        // Format lengkap: "Jumat, 28 Februari 2026 · 14:23 WIB"
+        const waktuLengkap = `${realtimeInfo.hariNama}, ${realtimeInfo.tanggal} ${realtimeInfo.bulanNama} ${realtimeInfo.tahun} · ${realtimeInfo.jamWIB} WIB`;
+
         const systemPrompt = `Kamu adalah Neo Assistant, AI Quantum v7 milik NeoPro — platform bisnis proaktif Digium Digital.
 
-DATA USER YANG SEDANG CHAT:
-- Nama   : ${userName}
-- Email  : ${userEmail}
-- Plan   : NeoPro ${userPlan}
-- Panggil user dengan nama "${userName}" secara natural.
-- Jika ditanya email atau identitas dirinya, jawab berdasarkan data di atas.
+═══ WAKTU & TANGGAL REALTIME (AKURAT) ═══
+Waktu saat ini : ${waktuLengkap}
+Hari           : ${realtimeInfo.hariNama}
+Tanggal        : ${realtimeInfo.tanggal} ${realtimeInfo.bulanNama} ${realtimeInfo.tahun}
+Jam            : ${realtimeInfo.jamWIB} WIB
+Bulan ke-      : ${realtimeInfo.bulanNum}
+Tahun          : ${realtimeInfo.tahun}
+Timezone       : ${realtimeInfo.timezone}
+PENTING: Selalu gunakan data waktu di atas jika user bertanya tentang jam, hari, tanggal, bulan, atau tahun. JANGAN gunakan pengetahuan training untuk waktu.
 
-KEPRIBADIAN: Cerdas, profesional, proaktif, actionable, langsung ke inti jawaban.
-INGATAN: Ingat konteks seluruh percakapan dalam sesi ini.
-BAHASA: Utama Bahasa Indonesia, switch sesuai permintaan.
-KEMAMPUAN: Analisis bisnis, coding, riset, marketing, e-commerce, keuangan, otomasi.
-MODE: ${mode || 'chat'}`;
+═══ DATA USER ═══
+Nama   : ${userName}
+Email  : ${userEmail}
+Plan   : NeoPro ${userPlan}
+Panggil user dengan nama "${userName}" secara natural.
+Jika ditanya email atau identitas, jawab berdasarkan data di atas.
+
+═══ INSTRUKSI ═══
+KEPRIBADIAN : Cerdas, profesional, proaktif, actionable, langsung ke inti jawaban.
+INGATAN     : Ingat konteks seluruh percakapan dalam sesi ini.
+BAHASA      : Utama Bahasa Indonesia, switch sesuai permintaan user.
+KEMAMPUAN   : Analisis bisnis, coding, riset, marketing, e-commerce, keuangan, otomasi.
+MODE        : ${mode || 'chat'}
+${webSearchResults ? `
+═══ DATA WEB SEARCH (REALTIME) ═══
+Berikut hasil pencarian internet terbaru untuk pertanyaan user.
+Gunakan data ini sebagai referensi utama dalam menjawab. Sebutkan sumber jika relevan.
+
+${webSearchResults}
+
+PENTING: Prioritaskan data di atas daripada pengetahuan training jika ada konflik.` : ''}`;
 
         let result;
         if (GROQ_KEYS.length > 0) {
@@ -310,7 +804,9 @@ MODE: ${mode || 'chat'}`;
         res.json({
             response: result.reply,
             provider: result.provider,
-            model:    result.model
+            model:    result.model,
+            webSearch: !!webSearchResults,
+            sources: webSources.slice(0,3) // kirim max 3 URL sumber ke frontend
         });
 
     } catch (e) {
@@ -319,6 +815,136 @@ MODE: ${mode || 'chat'}`;
     }
 });
 
+
+// ══════════════════════════════════════════════
+// RESEARCH AGENT — Deep Multi-Source Research
+// POST /api/research
+// ══════════════════════════════════════════════
+
+app.post('/api/research', async (req, res) => {
+    try {
+        const { topic, category: reqCategory, maxSources = 4, userContext = {} } = req.body;
+        if (!topic) return res.status(400).json({ error: 'topic wajib diisi' });
+
+        const category = reqCategory || detectResearchCategory(topic);
+        const template = RESEARCH_TEMPLATES[category] || RESEARCH_TEMPLATES.riset;
+
+        console.log(`[/api/research] Topic: "${topic}" | Category: ${category}`);
+
+        // Jalankan riset mendalam
+        const researchData = await runDeepResearch(topic, category, maxSources);
+
+        if (!researchData.rawData) {
+            return res.status(503).json({ error: 'Tidak dapat mengambil data riset saat ini.' });
+        }
+
+        // Waktu realtime WIB
+        const now  = new Date();
+        const wib  = new Date(now.getTime() + 7*60*60*1000);
+        const HARI = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+        const BULAN= ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+        const waktu= `${HARI[wib.getDay()]}, ${wib.getDate()} ${BULAN[wib.getMonth()]} ${wib.getFullYear()}`;
+
+        const userName = userContext.name || (userContext.email||'').split('@')[0] || 'Pengguna';
+
+        const systemPrompt = `${template.systemContext}
+
+TANGGAL RISET: ${waktu} (realtime)
+USER: ${userName}
+
+INSTRUKSI OUTPUT RISET:
+Buat laporan riset komprehensif dan actionable dengan struktur:
+
+1. 📊 RINGKASAN EKSEKUTIF (3-4 kalimat insight utama)
+2. 🔥 TEMUAN UTAMA (bullet point data penting dari hasil search)
+3. 💡 PELUANG & REKOMENDASI (minimal 3 rekomendasi konkret)
+4. ⚠️ TANTANGAN & RISIKO (hal yang perlu diwaspadai)
+5. 🚀 LANGKAH AKSI (5 langkah implementasi prioritas)
+6. 📈 ESTIMASI POTENSI (jika bisa dikira: traffic, revenue, kompetisi)
+
+Gunakan data dari hasil search di bawah sebagai referensi utama.
+Bahasa: Indonesia, profesional tapi mudah dipahami.`;
+
+        const messages = [
+            { role: 'user', content: `Buatkan laporan riset mendalam tentang: "${topic}"
+
+Kategori: ${template.label}
+
+=== DATA HASIL RISET INTERNET ===
+${researchData.rawData}` }
+        ];
+
+        // Generate laporan dengan AI
+        let result;
+        if (GROQ_KEYS.length > 0) {
+            try {
+                result = await callGroq(messages, systemPrompt);
+            } catch {
+                if (GEMINI_KEYS.length > 0) result = await callGemini(messages, systemPrompt);
+                else throw new Error('Semua AI provider gagal');
+            }
+        } else if (GEMINI_KEYS.length > 0) {
+            result = await callGemini(messages, systemPrompt);
+        } else {
+            return res.status(503).json({ error: 'Tidak ada AI key' });
+        }
+
+        res.json({
+            report      : result.reply,
+            topic,
+            category,
+            categoryLabel: template.label,
+            categoryEmoji: template.emoji,
+            sources     : researchData.sources,
+            queriesUsed : researchData.queriesUsed,
+            provider    : result.provider,
+            timestamp   : researchData.timestamp,
+            date        : waktu
+        });
+
+    } catch (e) {
+        console.error('[/api/research]', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Daily research semua kategori bisnis user
+// GET /api/research/daily
+app.get('/api/research/daily', async (req, res) => {
+    try {
+        const topics = [
+            { topic: 'KDP low content book trending niche 2025 2026', category: 'kdp' },
+            { topic: 'print on demand trending design niche profit', category: 'pod' },
+            { topic: 'microstock best selling category Shutterstock Adobe Stock', category: 'microstock' },
+            { topic: 'digital product template best selling Etsy Gumroad', category: 'digital' },
+        ];
+
+        const results = [];
+        for (const t of topics) {
+            try {
+                const data = await runDeepResearch(t.topic, t.category, 2); // 2 sources per topik agar cepat
+                const tmpl = RESEARCH_TEMPLATES[t.category];
+                results.push({
+                    category     : t.category,
+                    categoryLabel: tmpl.label,
+                    categoryEmoji: tmpl.emoji,
+                    snippet      : data.rawData.slice(0, 800), // preview
+                    sources      : data.sources.slice(0, 3)
+                });
+            } catch (e) {
+                results.push({ category: t.category, error: e.message });
+            }
+        }
+
+        res.json({
+            daily   : results,
+            date    : new Date().toISOString(),
+            message : 'Daily research selesai. Gunakan /api/research untuk laporan lebih detail.'
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
 // ══════════════════════════════════════════════
 // WHATSAPP — via WhatsApp Business API
