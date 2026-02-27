@@ -8,6 +8,7 @@ const express   = require('express');
 const cors      = require('cors');
 const helmet    = require('helmet');
 const rateLimit = require('express-rate-limit');
+const fetch     = require('node-fetch'); // ✅ explicit import untuk kompatibilitas
 
 const app  = express();
 app.set('trust proxy', 1); // Required for Railway reverse proxy
@@ -60,6 +61,7 @@ app.get('/', (req, res) => res.json({
     timestamp: new Date().toISOString(),
     endpoints: [
         'GET  /health',
+        'GET  /api/ai/test',
         'POST /api/chat',
         'POST /api/ai/chat',
         'POST /api/whatsapp/send',
@@ -207,6 +209,43 @@ Kemampuan: Analisis bisnis, coding, riset, marketing, e-commerce, keuangan, otom
 });
 
 // ══════════════════════════════════════════════
+// AI TEST — cek apakah key valid tanpa kirim chat
+// GET https://neoprocore.up.railway.app/api/ai/test
+// ══════════════════════════════════════════════
+
+app.get('/api/ai/test', async (req, res) => {
+    const groqStatus   = [];
+    const geminiStatus = [];
+
+    for (let i = 0; i < GROQ_KEYS.length; i++) {
+        try {
+            const r = await fetch('https://api.groq.com/openai/v1/models', {
+                headers: { 'Authorization': `Bearer ${GROQ_KEYS[i]}` }
+            });
+            groqStatus.push({ key: `GROQ_KEY_${i+1}`, status: r.ok ? '✅ valid' : `❌ HTTP ${r.status}` });
+        } catch (e) {
+            groqStatus.push({ key: `GROQ_KEY_${i+1}`, status: `❌ ${e.message}` });
+        }
+    }
+
+    for (let i = 0; i < GEMINI_KEYS.length; i++) {
+        try {
+            const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_KEYS[i]}`);
+            geminiStatus.push({ key: `GEMINI_KEY_${i+1}`, status: r.ok ? '✅ valid' : `❌ HTTP ${r.status}` });
+        } catch (e) {
+            geminiStatus.push({ key: `GEMINI_KEY_${i+1}`, status: `❌ ${e.message}` });
+        }
+    }
+
+    res.json({
+        groq_model:   GROQ_MODEL,
+        gemini_model: GEMINI_MODEL,
+        groq_keys:    groqStatus.length > 0 ? groqStatus : ['❌ Tidak ada key'],
+        gemini_keys:  geminiStatus.length > 0 ? geminiStatus : ['❌ Tidak ada key'],
+    });
+});
+
+// ══════════════════════════════════════════════
 // AI CHAT ALIAS — /api/ai/chat (dipakai dashboard.html)
 // Frontend expect: { response } bukan { reply }
 // ══════════════════════════════════════════════
@@ -215,13 +254,14 @@ app.post('/api/ai/chat', async (req, res) => {
     try {
         const { message, mode, conversation = [] } = req.body;
 
-        // Konversi format frontend → format callGroq/callGemini
+        if (!message) return res.status(400).json({ error: 'message wajib diisi' });
+
         const messages = [
             ...conversation.slice(-10).map(m => ({
                 role: m.role,
                 content: typeof m.content === 'string' ? m.content : ''
             })),
-            { role: 'user', content: message || '' }
+            { role: 'user', content: message }
         ];
 
         const systemPrompt = `Kamu adalah Neo Assistant, AI Quantum v7 milik NeoPro — platform bisnis proaktif Digium Digital.
@@ -251,7 +291,6 @@ Mode aktif: ${mode || 'chat'}`;
             return res.status(503).json({ error: 'Tidak ada API key AI yang dikonfigurasi.' });
         }
 
-        // ✅ Return format yang diharapkan frontend: { response }
         res.json({
             response: result.reply,
             provider: result.provider,
@@ -263,6 +302,7 @@ Mode aktif: ${mode || 'chat'}`;
         res.status(500).json({ error: e.message });
     }
 });
+
 
 // ══════════════════════════════════════════════
 // WHATSAPP — via WhatsApp Business API
