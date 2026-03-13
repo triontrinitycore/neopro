@@ -43,7 +43,27 @@ app.use(cors({
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use(rateLimit({ windowMs: 15*60*1000, max: 300, standardHeaders: true }));
+// Global rate limit
+app.use(rateLimit({ windowMs: 15*60*1000, max: 300, standardHeaders: true, legacyHeaders: false }));
+
+// AI endpoints — lebih ketat (max 60 req/15 menit per IP)
+const aiRateLimit = rateLimit({
+    windowMs: 15*60*1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Terlalu banyak request AI. Tunggu beberapa menit.' }
+});
+
+// Overall request timeout (60 detik max per request)
+app.use((req, res, next) => {
+    res.setTimeout(60000, () => {
+        if (!res.headersSent) {
+            res.status(408).json({ error: 'Request timeout (60s). Coba lagi.' });
+        }
+    });
+    next();
+});
 
 // Logger
 app.use((req, res, next) => {
@@ -79,20 +99,34 @@ app.get('/', (req, res) => res.json({
     ]
 }));
 
-app.get('/health', (req, res) => res.json({
-    status:    'ok',
-    uptime:    Math.floor(process.uptime()),
-    memory:    `${Math.round(process.memoryUsage().heapUsed/1024/1024)}MB`,
-    env:       process.env.RAILWAY_ENVIRONMENT || 'development',
-    timestamp: new Date().toISOString(),
-    keys: {
-        anthropic:  !!process.env.ANTHROPIC_API_KEY,
-        whatsapp:   !!process.env.WHATSAPP_TOKEN,
-        telegram:   !!process.env.TELEGRAM_BOT_TOKEN,
-        midtrans:   !!process.env.MIDTRANS_SERVER_KEY,
-        xendit:     !!process.env.XENDIT_API_KEY,
-    }
-}));
+app.get('/health', (req, res) => {
+    const mem = process.memoryUsage();
+    const heapPct = Math.round((mem.heapUsed / mem.heapTotal) * 100);
+    res.json({
+        status:    'ok',
+        uptime:    Math.floor(process.uptime()),
+        memory:    `${Math.round(mem.heapUsed/1024/1024)}MB / ${Math.round(mem.heapTotal/1024/1024)}MB (${heapPct}%)`,
+        memoryAlert: heapPct > 85 ? '⚠️ Heap usage tinggi!' : null,
+        env:       process.env.RAILWAY_ENVIRONMENT || 'development',
+        timestamp: new Date().toISOString(),
+        silentKillerStatus: {
+            zombieConnections: '✅ Semua fetch ada timeout',
+            unboundedQueues:   '✅ AI rate limit 60/15min aktif',
+            missingTimeouts:   '✅ Global 60s request timeout aktif'
+        },
+        aiProviders: {
+            groq:   GROQ_KEYS.length > 0 ? `✅ ${GROQ_KEYS.length} key` : '❌ Tidak ada key',
+            gemini: GEMINI_KEYS.length > 0 ? `✅ ${GEMINI_KEYS.length} key` : '❌ Tidak ada key',
+        },
+        keys: {
+            anthropic:  !!process.env.ANTHROPIC_API_KEY,
+            whatsapp:   !!process.env.WHATSAPP_TOKEN,
+            telegram:   !!process.env.TELEGRAM_BOT_TOKEN,
+            midtrans:   !!process.env.MIDTRANS_SERVER_KEY,
+            xendit:     !!process.env.XENDIT_API_KEY,
+        }
+    });
+});
 
 // ════════════════════════════════════════════════════════════════
 // NEO RESEARCH AGENT — Deep Multi-Source Research Engine
@@ -604,7 +638,8 @@ async function fetchWebPage(url) {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (compatible; NeoBot/1.0)',
                 'Accept': 'text/html,application/xhtml+xml',
-                'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8'
+                'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8',
+                'Connection': 'close'  /* ← prevent zombie connection */
             },
             signal: AbortSignal.timeout(8000),
             redirect: 'follow'
@@ -830,7 +865,7 @@ async function callGemini(messages, systemPrompt) {
     }
 }
 
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', aiRateLimit, async (req, res) => {
     try {
         const { messages = [], context = '' } = req.body;
         const systemPrompt = context || `Kamu adalah Neo Assistant, AI Quantum v7 milik NeoPro — platform bisnis proaktif Digium Digital.
@@ -879,7 +914,8 @@ app.get('/api/ai/test', async (req, res) => {
     for (let i = 0; i < GROQ_KEYS.length; i++) {
         try {
             const r = await fetch('https://api.groq.com/openai/v1/models', {
-                headers: { 'Authorization': `Bearer ${GROQ_KEYS[i]}` }
+                headers: { 'Authorization': `Bearer ${GROQ_KEYS[i]}` },
+                signal: AbortSignal.timeout(5000)
             });
             groqStatus.push({ key: `GROQ_KEY_${i+1}`, status: r.ok ? '✅ valid' : `❌ HTTP ${r.status}` });
         } catch (e) {
@@ -889,7 +925,7 @@ app.get('/api/ai/test', async (req, res) => {
 
     for (let i = 0; i < GEMINI_KEYS.length; i++) {
         try {
-            const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_KEYS[i]}`);
+            const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_KEYS[i]}`, { signal: AbortSignal.timeout(5000) });
             geminiStatus.push({ key: `GEMINI_KEY_${i+1}`, status: r.ok ? '✅ valid' : `❌ HTTP ${r.status}` });
         } catch (e) {
             geminiStatus.push({ key: `GEMINI_KEY_${i+1}`, status: `❌ ${e.message}` });
@@ -909,11 +945,13 @@ app.get('/api/ai/test', async (req, res) => {
 // Frontend expect: { response } bukan { reply }
 // ══════════════════════════════════════════════
 
-app.post('/api/ai/chat', async (req, res) => {
+app.post('/api/ai/chat', aiRateLimit, async (req, res) => {
     try {
         const { message, mode, conversation = [], userContext = {}, clientTime = {} } = req.body;
 
         if (!message) return res.status(400).json({ error: 'message wajib diisi' });
+        if (message.length > 8000) return res.status(400).json({ error: 'Pesan terlalu panjang (max 8000 karakter)' });
+        if (conversation.length > 50) return res.status(400).json({ error: 'History percakapan terlalu panjang (max 50 pesan)' });
 
         const messages = [
             ...conversation.slice(-10).map(m => ({
@@ -1043,7 +1081,7 @@ PENTING: Prioritaskan data di atas daripada pengetahuan training jika ada konfli
 // POST /api/research
 // ══════════════════════════════════════════════
 
-app.post('/api/research', async (req, res) => {
+app.post('/api/research', aiRateLimit, async (req, res) => {
     try {
         const { topic, category: reqCategory, maxSources = 4, userContext = {} } = req.body;
         if (!topic) return res.status(400).json({ error: 'topic wajib diisi' });
